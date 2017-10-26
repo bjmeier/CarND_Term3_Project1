@@ -197,8 +197,8 @@ int main() {
   }
 
   double ref_vel = 0;
-  double vn1 = 0;
-  double vn2 = 0;
+  double vn1 = 0.0;
+  double vn2 = 0.0;
   double ep = 0;
   int lane = 1;
 
@@ -231,7 +231,7 @@ int main() {
           	double car_d = j[1]["d"];
           	double car_yaw = j[1]["yaw"];
           	double car_speed = j[1]["speed"];
-          	cout << "car_s = " << car_s << endl;
+          	cout << "lane = " << lane << " car_s = " << car_s << " car d = " << car_d << " car speed = " << car_speed << endl;
 
           	// Previous path data given to the Planner
           	auto previous_path_x = j[1]["previous_path_x"];
@@ -257,9 +257,12 @@ int main() {
           	double dstemp = 1000.0;
           	vector<double> sa(3, 1000.0);
           	vector<double> sb(3, -1000.0);
-          	vector<double> va(3, 0.1);
-          	vector<double> vb(3, 0.1);
-          	vector<bool> lc(3, 0);
+          	vector<double> va(3);
+          	va[0] = 50 * 0.44704;
+          	va[1] = 50 * 0.44704;
+          	va[2] = 50 * 0.44704; // make lane 2 (right) the fastest default lane.
+          	vector<double> vb(3, 0.1); // initialize vehicles behind to be near zero speed
+          	vector<int> lc(3, 0); // initialze lane clear elements to 0 (not clear)
 
           	// determine closest car behind and in front for each lane
           	for(int i = 0; i<sensor_fusion.size(); i++)
@@ -269,7 +272,7 @@ int main() {
           		double vy = sensor_fusion[i][4];
           		double check_speed = sqrt(vx*vx + vy*vy);
           		double check_car_s = sensor_fusion[i][5];
-          		check_car_s += ((double)prev_size * 0.02 * check_speed);
+          		check_car_s += ((double)prev_size * dt * check_speed);
           		double dstemp = check_car_s - car_s;
           		int cl = 0;
           		for(int j = 0; j < 3; j++)
@@ -278,81 +281,149 @@ int main() {
           			{
           				cl = j;
           			}
-          			//cout << "d = " << d << " j = " << j << " cl = " << cl << endl;
           		}
-          		cout << "d = " << d << " cl = " << cl << " ds = " << dstemp << endl;
-          		if (dstemp > 0 && dstemp < sa[cl])
+
+          		if (dstemp >= 0 && dstemp < sa[cl])
           		{
           			sa[cl] = dstemp;
           			va[cl] = check_speed;
           		}
 
-          		if (dstemp <= 0 && dstemp > sb[cl])
+          		if (dstemp < 0 && dstemp > sb[cl])
           		{
           			sb[cl] = dstemp;
           			vb[cl] = check_speed;
           		}
           	}
-          	cout << "sa0 = " << sa[0] << " sa1 = " << sa[1] << " sa2 = " << sa[2] <<
-          			" sb0 = " << sb[0] << " sb1` = " << sb[1] << " sb2 = " << sb[2] << endl;
+
 
           	for(int i = 0; i < 3; i++)
           	{
           		double tb = -sb[i]/vb[i]; // time until car behind reaches spot occupied by car
-          		double ta =  sa[i]/vn1; // time until car reaches spot occupied by car in front
-          		if(ta > 3 && tb >2 )
+          		double ta =  sa[i]/max(0.1, vn1); // time until car reaches spot occupied by car in front
+          		double tac = sa[i]/max(0.01, (max(0.1, vn1) - va[i]));
+          		double tbc =-sb[i]/max(0.01, (vb[i] - max(0.1, vn1)));
+
+          		if(ta > 2.5 && tb > 2.0 && tac > 10.0 && tbc > 10.0)
           		{
           			lc[i] = 1;
           		}
-          		cout << "i = " << i << " va = " << vn1 << " vb = " << vb[i] <<
-          				" ta = " << ta << " tb = " << tb << " lc = " << lc[i] << endl;
+          		else if (ta > 1.6 && tb > 1.0 && tac > 10.0 && tbc > 10.0)
+          		{
+          			lc[i] = 2;
+          		}
+          		else if (ta > 0.5 && tb > 0.5 && tac > 5.0 && tbc > 5.0)
+          		{
+          			lc[i] = 3;
+          		}
+
+          		cout << "i = " << i << " lc = " << lc[i] <<
+          				" ta = " << ta << " tb = " << tb <<
+						" va = " << va[i] << " vb = " << vb[i] <<
+						" tac = " << tac << " tbc = " << tbc << endl;
           	}
-          	cout << "lc0 = " << lc[0] << " lc1 = " << lc[1] << " lc2 = " << lc[2] << endl;
 
 
           	double vahead = va[lane];
           	int temp_lane = lane;
-          	double ta = sa[lane]/vn1;
+          	double ta = sa[lane]/max(vn1, 0.1);
+          	double derr = 2  + 4 * lane - car_d;
+          	int speed_test = 0;
+          	if(vn1 >= 45.0/0.44704 || ((vahead - vn1) / 0.44704 <= 5.0))
+          			{
+          				speed_test = 1;
+          			}
 
-          	if(lane == 0 && lc[1] == 1)
+          	if(	lane == 0 &&
+          			lc[1] == 1 &&
+					abs(derr) < 0.5 &&
+					lc[2] > 0 &&
+					speed_test == 1)
+                  	{
+                  		temp_lane = 1;
+                  		Ts = 2.0;
+                  	}
+          	if(		lane == 0 &&
+           			lc[1] == 2 &&
+        			abs(derr) < 0.5 &&
+        			lc[2] == 1 &&
+        			speed_test == 1)
           	{
           		temp_lane = 1;
+          		Ts = 1.5;
           	}
-          	if(lane == 1 && lc[2] == 1)
+          	if(lane == 1 &&
+          			lc[2] == 1 &&
+					abs(derr) < 0.5 &&
+					speed_test == 1)
           	{
           		temp_lane = 2;
+          		Ts = 2.0;
           	}
-          	if(lane == 1 && lc[2] == 0 && ta < 2.1 && va[1] < (45.0 * 0.44704) && lc[0] == 1)
+          	if(lane == 1 &&
+          			lc[0] == 1 &&
+					ta < 2.1 &&	va[lane] < (45.0 * 0.44704) &&
+					abs(derr) < 0.5 &&
+					speed_test == 1)
           	{
           		temp_lane = 0;
+          		Ts = 2.0;
           	}
 
-          	if(lane = 2 && ta< 2.1 && va[1] < (45.0 * 0.44704) && lc[1] == 1)
+          	if(lane == 2 &&
+					lc[1] == 1 &&
+					ta < 2.1 &&	va[lane] < (45.0 * 0.44704) &&
+					abs(derr) < 0.5 &&
+					lc[0] > 0 &&
+          			speed_test == 1)
+             {
+                    temp_lane = 1;
+                    Ts = 2.0;
+             }
+            if(lane == 2 &&
+          			lc[1] == 2 &&
+          			ta < 2.1 &&	va[lane] < (45.0 * 0.44704) &&
+          			abs(derr) < 0.5 &&
+          			lc[0] == 1 &&
+          			speed_test == 1)
           	{
           		temp_lane = 1;
+          		Ts = 1.5;
           	}
 
           	lane = temp_lane;
 
 			ds = sa[lane];
-            double err = ds - vn1*Ts;
+
+            double err = ds - max(0.1, vn1)*Ts;
+            double derrdt = va[lane] - max(0.1, vn1);
             double P = 1.0;
-            double I = 0.0;
-            double D = 0.000;
-            atemp = P * err + I * (err + ep) * dt + D * (err - ep)/dt;
-            atemp = min(atemp, 9.0); // min acc constraint
-            double ap = (vn1 - vn2)/dt;
-            atemp = min(atemp, ap + 9.0*dt); // min jerk constraint
-            atemp = min(atemp, (49.5 * 0.44704 - vn1)/dt);
+            double D = 0.02;
+            double ap = (max(0.1, vn1) - max(0.1, vn2))/dt;
+            atemp = P * err + D * derrdt;
+            atemp = min(atemp, 9.0); // max acc constraint
+            atemp = max(atemp, -9.0); // min acc constraint
+            // max speed conatraint
+            atemp = min(atemp, (49.5*0.44704 - vn1)/dt);
+            if(atemp > 0.9*dt && (49.5*0.44704 - vn1) < (ap*ap/18.0))
+            {
+            	atemp = ap - 9.0 * dt;
+            }
+
+            atemp = min(atemp, ap + 9.0*dt); // max jerk constraint
+            atemp = max(atemp, ap - 9.0*dt); // min jerk constraint
+            atemp = min(atemp, (49.9 * 0.44704 - max(0.1, vn1))/dt); // speed limit constraint
+            atemp = max(atemp, (0.1 * 0.44704 - max(0.1, vn1))/dt); // speed limit constraint
             if (atemp<a)
             {
             	a = atemp;
             }
 
-          	//cout << " vn2 = " << vn2 << " vn1 = " << vn1 << " ap = " << ap <<
-          	//		" j = " << (atemp - ap)/dt << " a = " << a << " ds = " << ds << endl;
-
-          	ref_vel = (vn1 + a*dt)/0.44704;
+          	cout << " j = " << (atemp - ap)/dt << " a = " << a << " ds = " << ds <<
+          			" vn2 = " << vn2 << " vn1 = " << vn1 << " ap = " << ap <<
+          			endl;
+            cout << endl;
+          	ref_vel = (vn1 + a * dt)/0.44704;
 
           	json msgJson;
 
@@ -442,7 +513,7 @@ int main() {
           		next_y_vals.push_back(previous_path_y[i]);
           	}
 
-          	double target_x = 30.0;
+          	double target_x = max(20.0, vmps*3);
           	double target_y = s(target_x);
           	double target_dist = sqrt((target_x) * (target_x) + (target_y) * (target_y));
 
