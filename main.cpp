@@ -9,8 +9,11 @@
 #include "Eigen-3.3/Eigen/QR"
 #include "json.hpp"
 #include "spline.h"
+#include "Eigen-3.3/Eigen/Dense"
 
 using namespace std;
+using Eigen::MatrixXd;
+using Eigen::VectorXd;
 
 // for convenience
 using json = nlohmann::json;
@@ -34,6 +37,47 @@ string hasData(string s) {
     return s.substr(b1, b2 - b1 + 2);
   }
   return "";
+}
+
+vector<double> getAjmt(double y, double yp, double ypp, double yf, double ypf, double yppf, double xf)
+// finds constants for a quintic polynomial y = f(x)
+// y is the y value at x = 0
+// yp = dy/dx at x = 0
+// ypp = d2y/dx2 at x = 0
+// xf is the final value for x
+// y is the y value at x = xf
+// ypf = dy/dx at x = xf
+// yppf = d2y/dx2 at x = xf
+// y = dy/dx = d2y/dx2 = 0 at x = xf
+	{
+		double a0 = y;
+		double a1 = yp;
+		double a2 = ypp/2;
+		double b0 = yf - a0 - a1 * xf - a2 * xf * xf;
+		double b1 = ypf - a1 - 2 * a2 * xf;
+		double b2 = yppf - 2 * a2;
+		MatrixXd b(3,1);
+		b << b0, b1, b2;
+		MatrixXd A(3,3);
+		A <<    xf*xf*xf, xf*xf*xf*xf, xf*xf*xf*xf,
+				3*xf*xf , 4*xf*xf*xf , 5*xf*xf,
+				6*xf    , 12*xf      , 20*xf;
+		MatrixXd alpha(3,1);
+		alpha = A.inverse()*b;
+		return{a0, a1, a2, alpha(0,0), alpha(1,0), alpha(2,0)};
+	}
+
+double getYjmt(vector<double> a, double x)
+// a is a vector of length 6
+// and contains quintic polynomial constants a0, a1, .. a5
+// returns a0 + a1*x + a2*x^2+...a5*x^5
+{
+	double result = 0.0;
+	for (int i = 0; i < 6; i++)
+	{
+		result += a[i]*pow(x,i);
+	}
+	return(result);
 }
 
 double distance(double x1, double y1, double x2, double y2)
@@ -196,21 +240,20 @@ int main() {
   	map_waypoints_dy.push_back(d_y);
   }
 
-  double ref_vel = 0;
-  double vn1 = 0.0;
-  double vn2 = 0.0;
-  double ep = 0;
-  int lane = 1;
+  double ref_vel = 0.0; // reference speed in mph
+  double vn1 = 0.0; 	// speed at t - dt in m/s
+  double vn2 = 0.0; 	// speed at t - 2 * dt in mps
+  int lane = 1;			// lane occupied by car
 
-  h.onMessage([& ep, &vn1, &vn2, &ref_vel, &lane, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&vn1, &vn2, &ref_vel, &lane, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     //auto sdata = string(data).substr(0, length);
     //cout << sdata << endl;
-	double dt = 1.0/50;
-	double Ts = 2.0; // safety distance between cars
+	double dt = 1.0/50;	// time between steps in s
+	double Ts = 2.0; 	// safety distance between cars in m
     if (length && length > 2 && data[0] == '4' && data[1] == '2') {
 
 
@@ -251,17 +294,17 @@ int main() {
           		car_s = end_path_s;
           	}
 
-          	double a = 9.0;
-          	double atemp = 0.0;
-          	double ds = 1000.0;
-          	double dstemp = 1000.0;
-          	vector<double> sa(3, 1000.0);
-          	vector<double> sb(3, -1000.0);
-          	vector<double> va(3);
-          	va[0] = 50 * 0.44704;
-          	va[1] = 50 * 0.44704;
-          	va[2] = 50 * 0.44704; // make lane 2 (right) the fastest default lane.
+          	double a = 9.0;		// acceleration in m/s^2
+          	double atemp = 0.0; // temporary acceleration in m/s^2
+          	double ds = 1000.0; // distance between car and car in front in m.  Initially set 1 km.
+          	double dstemp = 1000.0;  // temporary distance between cars Initially set 1 km.
+          	vector<double> sa(3, 1000.0); // distance between car and nearest car in front for each lane in m
+          	vector<double> sb(3, -1000.0);// distance between car and nearest car behind for each lane in m
+          	vector<double> va(3);// speed of vehicle agead
           	vector<double> vb(3, 0.1); // initialize vehicles behind to be near zero speed
+          	va[0] = 50 * 0.44704;	// initialize speed ahead to 50 mph
+          	va[1] = 50 * 0.44704;
+          	va[2] = 50 * 0.44704;
           	vector<int> lc(3, 0); // initialze lane clear elements to 0 (not clear)
 
           	// determine closest car behind and in front for each lane
@@ -275,6 +318,7 @@ int main() {
           		check_car_s += ((double)prev_size * dt * check_speed);
           		double dstemp = check_car_s - car_s;
           		int cl = 0;
+          		// determine and set lane of each car
           		for(int j = 0; j < 3; j++)
           		{
           			if(d <( 4 * j + 4) && d >= (4 * j))
@@ -282,13 +326,13 @@ int main() {
           				cl = j;
           			}
           		}
-
+          		// if nearest in front, set sa, va
           		if (dstemp >= 0 && dstemp < sa[cl])
           		{
           			sa[cl] = dstemp;
           			va[cl] = check_speed;
           		}
-
+          		// if nearest behind, set sb, vb
           		if (dstemp < 0 && dstemp > sb[cl])
           		{
           			sb[cl] = dstemp;
@@ -299,19 +343,23 @@ int main() {
 
           	for(int i = 0; i < 3; i++)
           	{
-          		double tb = -sb[i]/vb[i]; // time until car behind reaches spot occupied by car
-          		double ta =  sa[i]/max(0.1, vn1); // time until car reaches spot occupied by car in front
-          		double tac = sa[i]/max(0.01, (max(0.1, vn1) - va[i]));
-          		double tbc =-sb[i]/max(0.01, (vb[i] - max(0.1, vn1)));
+          		// times below assume cars maintain constant speeds
+          		double tb = -sb[i]/vb[i]; // time until car behind reaches spot occupied by car in s
+          		double ta =  sa[i]/max(0.1, vn1); // time until car reaches spot occupied by car in front in s
+          		double tac = sa[i]/max(0.01, (max(0.1, vn1) - va[i])); // time until car collides with car in front in s
+          		double tbc =-sb[i]/max(0.01, (vb[i] - max(0.1, vn1))); // time until car is rear ended  in s
 
+          		// determine if lane is wide open
           		if(ta > 2.5 && tb > 2.0 && tac > 10.0 && tbc > 10.0)
           		{
           			lc[i] = 1;
           		}
+          		// determine if lane is open
           		else if (ta > 1.6 && tb > 1.0 && tac > 10.0 && tbc > 10.0)
           		{
           			lc[i] = 2;
           		}
+          		// determine if lane is almost closed
           		else if (ta > 0.5 && tb > 0.5 && tac > 5.0 && tbc > 5.0)
           		{
           			lc[i] = 3;
@@ -323,17 +371,19 @@ int main() {
 						" tac = " << tac << " tbc = " << tbc << endl;
           	}
 
-
-          	double vahead = va[lane];
-          	int temp_lane = lane;
-          	double ta = sa[lane]/max(vn1, 0.1);
-          	double derr = 2  + 4 * lane - car_d;
+          	// select lane
+          	double vahead = va[lane]; // determine speed of car ahead in lane
+          	int temp_lane = lane; // set temp_lane to current lane
+          	double ta = sa[lane]/max(vn1, 0.1); // time until car reaches spot held by car ahead.
+          	double derr = 2.0  + 4.0 * lane - car_d; // make sure car is in middle of lane.  Used to prevent double lane changes
+          	// speed test is used to make sure car is moving close to the speed limit or the speed of the car ahead prior to changing lanes
           	int speed_test = 0;
-          	if(vn1 >= 45.0/0.44704 || ((vahead - vn1) / 0.44704 <= 5.0))
+          	if(vn1 >= 45.0*0.44704 || ((vahead - vn1) / 0.44704 <= 5.0))
           			{
           				speed_test = 1;
           			}
-
+          	// car moves from left to center lane if right lane isn't closed and middle lane is wide open.
+          	// biaed to move car to right lane.
           	if(	lane == 0 &&
           			lc[1] == 1 &&
 					abs(derr) < 0.5 &&
@@ -343,6 +393,7 @@ int main() {
                   		temp_lane = 1;
                   		Ts = 2.0;
                   	}
+          	// car moves from left lane to center lane if right lane is wide open and center lane is mostly open
           	if(		lane == 0 &&
            			lc[1] == 2 &&
         			abs(derr) < 0.5 &&
@@ -352,6 +403,8 @@ int main() {
           		temp_lane = 1;
           		Ts = 1.5;
           	}
+
+          	// car moves from center lane to right lane if right lane is wide open
           	if(lane == 1 &&
           			lc[2] == 1 &&
 					abs(derr) < 0.5 &&
@@ -360,6 +413,9 @@ int main() {
           		temp_lane = 2;
           		Ts = 2.0;
           	}
+
+          	// car moves from center lane to left lane if left lane is wide open, right lane isn't wide open and car in front is moving
+          	// below the speed limit
           	if(lane == 1 &&
           			lc[0] == 1 &&
 					ta < 2.1 &&	va[lane] < (45.0 * 0.44704) &&
@@ -370,6 +426,8 @@ int main() {
           		Ts = 2.0;
           	}
 
+          	// car moves from right lane to middle lane if middle lane is wide open, left lane isn't closed and car in front is moving
+          	// below the speed limit
           	if(lane == 2 &&
 					lc[1] == 1 &&
 					ta < 2.1 &&	va[lane] < (45.0 * 0.44704) &&
@@ -380,6 +438,9 @@ int main() {
                     temp_lane = 1;
                     Ts = 2.0;
              }
+
+          	// car moves from right lane to middle lane if middle lane is open, the left lane is wide open and the car in front is moving
+          	// below the speed limit
             if(lane == 2 &&
           			lc[1] == 2 &&
           			ta < 2.1 &&	va[lane] < (45.0 * 0.44704) &&
@@ -393,6 +454,12 @@ int main() {
 
           	lane = temp_lane;
 
+          	// set speed
+          	// use PD control with restricitons
+          	// strong, but not overwhelming P
+          	// small D
+          	// max acc is set to 9.0 m/s^s; max jerk is set to 9.0 m/s^3
+          	// min acc is set to 9.0 m/s^s; min jerk is set to 9.0 m/s^3
 			ds = sa[lane];
 
             double err = ds - max(0.1, vn1)*Ts;
@@ -435,6 +502,11 @@ int main() {
           	double ref_x = car_x;
           	double ref_y = car_y;
           	double ref_yaw = deg2rad(car_yaw);
+
+          	double yjmt;
+            double ypjmt;
+            double yppjmt;
+            vector<double> ac(6);
 
           	// if previous size is almost empty, use the car as starting reference
           	if(prev_size< 2)
@@ -513,7 +585,7 @@ int main() {
           		next_y_vals.push_back(previous_path_y[i]);
           	}
 
-          	double target_x = max(20.0, vmps*3);
+          	double target_x = max(20.0, vmps*3.0);
           	double target_y = s(target_x);
           	double target_dist = sqrt((target_x) * (target_x) + (target_y) * (target_y));
 
