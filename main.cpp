@@ -9,7 +9,6 @@
 #include "Eigen-3.3/Eigen/QR"
 #include "json.hpp"
 #include "spline.h"
-#include "Eigen-3.3/Eigen/Dense"
 
 using namespace std;
 using Eigen::MatrixXd;
@@ -37,47 +36,6 @@ string hasData(string s) {
     return s.substr(b1, b2 - b1 + 2);
   }
   return "";
-}
-
-vector<double> getAjmt(double y, double yp, double ypp, double yf, double ypf, double yppf, double xf)
-// finds constants for a quintic polynomial y = f(x)
-// y is the y value at x = 0
-// yp = dy/dx at x = 0
-// ypp = d2y/dx2 at x = 0
-// xf is the final value for x
-// y is the y value at x = xf
-// ypf = dy/dx at x = xf
-// yppf = d2y/dx2 at x = xf
-// y = dy/dx = d2y/dx2 = 0 at x = xf
-	{
-		double a0 = y;
-		double a1 = yp;
-		double a2 = ypp/2;
-		double b0 = yf - a0 - a1 * xf - a2 * xf * xf;
-		double b1 = ypf - a1 - 2 * a2 * xf;
-		double b2 = yppf - 2 * a2;
-		MatrixXd b(3,1);
-		b << b0, b1, b2;
-		MatrixXd A(3,3);
-		A <<    xf*xf*xf, xf*xf*xf*xf, xf*xf*xf*xf,
-				3*xf*xf , 4*xf*xf*xf , 5*xf*xf,
-				6*xf    , 12*xf      , 20*xf;
-		MatrixXd alpha(3,1);
-		alpha = A.inverse()*b;
-		return{a0, a1, a2, alpha(0,0), alpha(1,0), alpha(2,0)};
-	}
-
-double getYjmt(vector<double> a, double x)
-// a is a vector of length 6
-// and contains quintic polynomial constants a0, a1, .. a5
-// returns a0 + a1*x + a2*x^2+...a5*x^5
-{
-	double result = 0.0;
-	for (int i = 0; i < 6; i++)
-	{
-		result += a[i]*pow(x,i);
-	}
-	return(result);
 }
 
 double distance(double x1, double y1, double x2, double y2)
@@ -241,12 +199,13 @@ int main() {
   }
 
   double ref_vel = 0.0; // reference speed in mph
-  double vn1 = 2.0; 	// speed at t - dt in m/s
-  double vn2 = vn1 - 9.0/50; 	// speed at t - 2 * dt in mps
+  double vn1 = 1.0; 	// speed at t - dt in m/s
+  double vn2 = vn1 - 2.0*0.02; 	// speed at t - 2 * dt in mps
+  double ap = 2.0;
   int lane = 1;			// lane occupied by car
-  double ep = 0;
+  int N_lag = 1;		// number of new points.  Allows jerk limit to be independant of latency.
 
-  h.onMessage([&ep, &vn1, &vn2, &ref_vel, &lane, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&ap, &N_lag, &max_s, &vn1, &vn2, &ref_vel, &lane, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -266,8 +225,7 @@ int main() {
         string event = j[0].get<string>();
         
         if (event == "telemetry") {
-          // j[1] is the data JSON objectls
-
+          // j[1] is the data JSON object
           
         	// Main car's localization Data
           	double car_x = j[1]["x"];
@@ -296,12 +254,11 @@ int main() {
           		car_s = end_path_s;
           	}
 
-          	double a = 9.0;		// acceleration in m/s^2
-          	double atemp = 0.0; // temporary acceleration in m/s^2
+
           	double ds = 1000.0; // distance between car and car in front in m.  Initially set 1 km.
           	double dstemp = 1000.0;  // temporary distance between cars Initially set 1 km.
-          	vector<double> sa(3, 1000.0); // distance between car and nearest car in front for each lane in m
-          	vector<double> sb(3, -1000.0);// distance between car and nearest car behind for each lane in m
+          	vector<double> sa(3,  max_s / 2.01); // distance between car and nearest car in front for each lane in m
+          	vector<double> sb(3, -max_s / 2.01);// distance between car and nearest car behind for each lane in m
           	vector<double> va(3);// speed of vehicle agead
           	vector<double> vb(3, 0.1); // initialize vehicles behind to be near zero speed
           	va[0] = 50 * 0.44704;	// initialize speed ahead to 50 mph
@@ -319,6 +276,14 @@ int main() {
           		double check_car_s = sensor_fusion[i][5];
           		check_car_s += ((double)prev_size * dt * check_speed);
           		double dstemp = check_car_s - car_s;
+          		if(dstemp < (max_s/2))
+          		{
+          			dstemp += max_s;
+          		}
+          		if(dstemp > (max_s/2))
+          		{
+          			dstemp -= max_s;
+          		}
           		int cl = 0;
           		// determine and set lane of each car
           		for(int j = 0; j < 3; j++)
@@ -463,39 +428,53 @@ int main() {
           	// max acc is set to 9.0 m/s^s; max jerk is set to 9.0 m/s^3
           	// min acc is set to 9.0 m/s^s; min jerk is set to 9.0 m/s^3
 			ds = sa[lane];
-			cout << "ds = " << ds << " v = " << vn1 << " t = " << ds/vn1 << endl;
 
+          	double a = 9.0;		// acceleration in m/s^2
+          	double atemp = 0.0; // temporary acceleration in m/s^2
             double err = ds - max(0.1, vn1)*Ts;
-            double derrdt = (err - ep)/dt;
-            ep = err;
+            double derrdt = va[lane] - max(0.1, vn1);
             double P = 1.0;
             double D = 0.02;
-            double ap = (max(0.1, vn1) - max(0.05, vn2))/dt;
-            atemp = P * err + D * derrdt;
-            atemp = min(atemp, 9.0); // max acc constraint
-            atemp = max(atemp, -9.0); // min acc constraint
-            // max speed conatraint
-            atemp = min(atemp, (49.5*0.44704 - vn1)/dt);
-            if(atemp > 0.9*dt && (49.5*0.44704 - vn1) < (ap*ap/18.0))
+
+            double a_lim = 9.0;
+            double j_lim = 9.0;
+
+            if ((sa[lane]/max(0.01, vn1) >= 5.0) && (derrdt < 0.0)) // make sure step changes don't cause cars to stop moving
             {
-            	atemp = ap - 9.0 * dt;
+            	D = 0;
             }
 
-            atemp = min(atemp, ap + 9.0*dt); // max jerk constraint
-            atemp = max(atemp, ap - 9.0*dt); // min jerk constraint
-            atemp = min(atemp, (49.9 * 0.44704 - max(0.1, vn1))/dt); // speed limit constraint
-            atemp = max(atemp, (0.1 * 0.44704 - max(0.1, vn1))/dt); // speed limit constraint
+            atemp = P * err + D * derrdt;
+            cout << "atemp 1 = " << atemp << endl;
+            atemp = min(atemp,  a_lim); // max acc constraint
+            atemp = max(atemp, -a_lim); // min acc constraint
+            cout << "atemp max acc = " << atemp << endl;
+            // max speed constraint
+            atemp = min(atemp, (49.5*0.44704 - vn1)/(N_lag*dt));
+            cout << "atemp max speed 1 = " << atemp << endl;
+            if(atemp > a_lim * dt * N_lag && (49.5*0.44704 - vn1) < (ap*ap/(2*j_lim)))
+            {
+            	atemp = ap - a_lim * dt * N_lag;
+            }
+            cout << "atemp approach max speed = " << atemp << endl;
+
+            atemp = min(atemp, ap + j_lim * dt * N_lag); // max jerk constraint
+            atemp = max(atemp, ap - j_lim * dt * N_lag); // min jerk constraint
+            cout << "atemp max jerk = " << atemp << endl;
+            atemp = min(atemp, (49.9 * 0.44704 - max(0.1, vn1))/(N_lag*dt)); // speed limit constraint
+            atemp = max(atemp, (0.1 * 0.44704 - max(0.1, vn1))/(N_lag*dt)); // speed limit constraint
+            cout << "atemp hard speed limit = " << atemp << endl;
             if (atemp<a)
             {
             	a = atemp;
             }
 
-          	cout << " j = " << (atemp - ap)/dt << " a = " << a << " ds = " << ds <<
+          	cout << "j = " << (atemp - ap)/dt << " a = " << a << " ds = " << ds <<
           			" vn2 = " << vn2 << " vn1 = " << vn1 << " ap = " << ap <<
           			endl;
-            cout << endl;
-          	ref_vel = (vn1 + a * dt)/0.44704;
-
+          	cout << "time ahead = " << sa[lane]/max(0.01, vn1) << endl;
+          	ref_vel = (vn1 + a * (N_lag*dt))/0.44704;
+          	 ap = a;
           	json msgJson;
 
           	vector<double> ptsx;
@@ -506,13 +485,6 @@ int main() {
           	double ref_x = car_x;
           	double ref_y = car_y;
           	double ref_yaw = deg2rad(car_yaw);
-
-          	cout << "PREVIOUS POINTS" << endl;
-          	for(int i = 0; i < previous_path_x.size(); i++)
-          	{
-          		cout << "i = " << i << " x = " << previous_path_x[i] <<
-          				" y = " << previous_path_y[i] << endl;
-          	}
 
           	// if previous size is almost empty, use the car as starting reference
           	if(prev_size< 2)
@@ -545,17 +517,13 @@ int main() {
           		ptsy.push_back(ref_y_prev);
           		ptsy.push_back(ref_y);
           	}
+          	double vmps = ref_vel * 0.44704;
+          	double s_ahead = max(20.0, vmps * 2.0);
 
-          	cout << "FROM PREVIOUS POINTS" << endl;
-          	for(int i = 0; i < ptsx.size(); i++)
-          	{
-          		cout << "i = " << i << " x = " << ptsx[i] << " y = " << ptsy[i] << endl;
-          	}
-
-           // In Frenet add evenly 30m spaced points ahead of the starting reference
-          	vector<double> next_wp0 = getXY(car_s + 30, (2 + 4 * lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          	vector<double> next_wp1 = getXY(car_s + 60, (2 + 4 * lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          	vector<double> next_wp2 = getXY(car_s + 90, (2 + 4 * lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+           // In Frenet add evenly spaced points ahead of the starting reference
+          	vector<double> next_wp0 = getXY(car_s +     s_ahead, (2 + 4 * lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          	vector<double> next_wp1 = getXY(car_s + 2 * s_ahead, (2 + 4 * lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          	vector<double> next_wp2 = getXY(car_s + 3 * s_ahead, (2 + 4 * lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
 
           	ptsx.push_back(next_wp0[0]);
@@ -566,18 +534,8 @@ int main() {
           	ptsy.push_back(next_wp1[1]);
           	ptsy.push_back(next_wp2[1]);
 
-          	cout << "CAR" << endl;
-          	cout <<"s = " << car_s << " d = " << car_d << " x = " << car_x << " y " << car_y <<
-          			" yaw = " << car_yaw << endl;;
 
-         	cout << "PREVIOUS POINTS + WAYPOINTS" << endl;
-          	for(int i = 0; i < ptsx.size(); i++)
-          	{
-          		cout << "i = " << i << " x = " << ptsx[i] << " y = " << ptsy[i] << endl;
-          	}
-
-      		double vmps = ref_vel * 0.44704;
-      	    double dist_inc = vmps * dt;
+      	    //double dist_inc = vmps * dt;
       		//cout<<"vmps = " << vmps << " dt = " << dt << " vmph = " << " dist_inc = " << dist_inc << endl;
           	for(int i = 0; i < ptsx.size(); i++)
           	{
@@ -587,12 +545,6 @@ int main() {
 
           		ptsx[i] = (shift_x * cos(0 - ref_yaw) - shift_y * sin(0 - ref_yaw));
           		ptsy[i] = (shift_x * sin(0 - ref_yaw) + shift_y * cos(0 - ref_yaw));
-          	}
-
-         	cout << "TRANSFORMED PREVIOUS POINTS + WAYPOINTS" << endl;
-          	for(int i = 0; i < ptsx.size(); i++)
-          	{
-          		cout << "i = " << i << " x = " << ptsx[i] << " y = " << ptsy[i] << endl;
           	}
 
           	// create a spline
@@ -612,30 +564,22 @@ int main() {
           		next_y_vals.push_back(previous_path_y[i]);
           	}
 
-          	cout<<"POINTS FROM PREV" << endl;
-          	for(int i = 0; i < next_x_vals.size(); i++)
-          	{
-          		cout << "i = " << i << " x = " << next_x_vals[i] << " y = " << next_y_vals[i] << endl;
-          	}
-
-          	double target_x = max(20.0, vmps*3.0);
+          	double target_x = max(20.0, vmps*2.0);
           	double target_y = s(target_x);
           	double target_dist = sqrt((target_x) * (target_x) + (target_y) * (target_y));
 
           	double x_add_on = 0;
 
-          	cout<<"TARGET"<< endl;
-          	cout<<"x = " << target_x << " y = " << target_y << " dist = " << target_dist << endl;
-
-          	cout << "NEW POINTS UNROTATED" << endl;
+          	double N_points = 10;  // buffer length.  N/50 seconds.
+          	N_lag = N_points - previous_path_x.size();//
+          	cout <<"N_lag = " << N_lag << endl << endl;
           	// fill up the rest of our path planner after filling it with previous points
-          	for(int i = 1; i <= 10 - previous_path_x.size(); i++)
+          	for(int i = 1; i <= N_points - previous_path_x.size(); i++)
           	{
           		double N = (target_dist/(dt * vmps));
           		double x_point = x_add_on + (target_x) / N;
           		double y_point = s(x_point);
 
-          		cout << "i = " << i << " x = " << x_point << " y = " << y_point << endl;
           		x_add_on = x_point;
 
           		double x_ref = x_point;
@@ -650,13 +594,6 @@ int main() {
 
           		next_x_vals.push_back(x_point);
           		next_y_vals.push_back(y_point);
-          	}
-
-          	cout<<"NEXT VALS"<< endl;
-         	cout << "PREVIOUS POINTS + WAYPOINTS" << endl;
-          	for(int i = 0; i < next_x_vals.size(); i++)
-          	{
-          		cout << "i = " << i << " x = " << next_x_vals[i] << " y = " << next_y_vals[i] << endl;
           	}
 
 
