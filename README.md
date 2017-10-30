@@ -2,14 +2,14 @@
 [image1]: ./PID_jerk_acc.png
 [image2]: ./PID_speed.png
 
-#Udacity Self-Driving Car Nanodegree Program 
-#Term 3 Project 1
+# Udacity Self-Driving Car Nanodegree Program 
+# Term 3 Project 1
 
-##Path Planning
+## Path Planning
 
-###Summary
+### Summary
 This report is generated to satisfy the first project in Term 3 of the Udacity Self-Driving Car Nanodegree program, path planning.  The goal is to cretae and implement an algorithm in c++ to safely navigate a car through traffic on a highway with a speed limit of 50 mph. The Udacity simulator feeds car position and car location.  Starter functions and map data were provided to located the car on the map and convert between catesian and Frenet coordinates. 
-###Rubric Points
+### Rubric Points
 - Code compiles correctly
 Code compiles with cmake and make
 - Car must complte 4.32 miles in the simulator without incident.
@@ -160,4 +160,5 @@ Then, points at `s_ahead`, `2 * s_ahead` and `3 * s_ahead` are added to the two 
 5. The `x_point` and `y_point` values are transformed from the car reference frame to the map reference frame.
 6. These transformed points are added to the `next_x_vals` and `next_y_vals` vectors.
 #### Lines 601-602: `next_x_vals` and `next_y_vals` vectors are fed back to the simulator.
-
+### Conclusion
+A path planning algorithm has been developed and implemented in the Udacity Term 3 simulator.  
