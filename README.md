@@ -158,7 +158,7 @@ Then, points at `s_ahead`, `2 * s_ahead` and `3 * s_ahead` are added to the two 
 #### Lines 556-597:  Create set of points to feed back to the simulator
 1. The previous buffer points are loaded into the vectors `next_x_vals` and `next_y_vals`. 
 2. The number of new points required, `N-lag`, is set to the difference of ten and the number of points remaining in the buffer.
-3. The change in x-direction is estimated. It is assumed that the car will return to the track centerline in 20.0 m along a straight line of distance, `dist`= sqrt((y(x=20 m) - y(x = 0 m)^2 + 20^2)`The `x_point` values are set so that `dist / dt = ref_vel`.  
+3. The change in x-direction is estimated. It is assumed that the car will return to the track centerline in 20.0 m along a straight line of distance, `dist = sqrt[(y(x = 20 m) - y(x = 0 m))^2 + (20 m) ^ 2]`The `x_point` values are set so that `dist / dt = ref_vel`.  
 4. The `x_point` values are fed into the spline `s` to generate new `y_points`.
 5. The `x_point` and `y_point` values are transformed from the car reference frame to the map reference frame.
 6. These transformed points are added to the `next_x_vals` and `next_y_vals` vectors.
