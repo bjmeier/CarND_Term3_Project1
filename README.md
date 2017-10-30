@@ -2,25 +2,25 @@
 [image1]: ./PID_jerk_acc.png
 [image2]: ./PID_speed.png
 
-# Udacity Self-Driving Car Nanodegree Program 
+# [Udacity Self-Driving Car Nanodegree Program](https://www.udacity.com/course/intro-to-self-driving-cars--nd113?gclid=EAIaIQobChMIoLbZ8OeY1wIViLftCh01PgTuEAAYASAAEgK45vD_BwE)
 # Term 3 Project 1
 
 ## Path Planning
 
 ### Summary
-This report is generated to satisfy the first project in Term 3 of the Udacity Self-Driving Car Nanodegree program, path planning.  The purpose of the project is to create and implement an algorithm in c++ to safely navigate a car through traffic on a highway with a speed limit of 50 mph. The Udacity simulator feeds car position and car location.  Starter functions and map data were provided to locate cars on the map and convert between Cartesian and Frenet coordinates. 
+This report is generated to satisfy the first project in Term 3 of the Udacity Self-Driving Car Nanodegree program, path planning.  The purpose of the project is to create and implement an algorithm in c++ to safely navigate a car through traffic on a highway simulator. Inputs are car position and bearing data from the simulator.  Outputs are car path points. 
 ### Rubric Points
 - Code compiles correctly.
 Code compiles with cmake and make
 - Car must complete 4.32 miles in the simulator without incident.
 This is demonstrated in video linked below.
-- Car Drives according to the speed limit
+- Car Drives according to the speed limit.
 As demonstrated in the video linked below, the car drives just under the speed limit unless its path is obstructed.
-- Car must make changes when it makes sense to do so
+- Car must make changes when it makes sense to do so.
 This is demonstrated in video linked below.
-- Acceleration may not exceed 10 m/s^2
+- Acceleration may not exceed 10 m/s^2.
 This is demonstrated in video linked below.
-- Jerk may not exceed 10 m/s^3
+- Jerk may not exceed 10 m/s^3.
 This is demonstrated in video linked below.
 - Car must not spend more than three seconds between lanes.
 This is demonstrated in video linked below.
@@ -29,10 +29,12 @@ The logic behind lane changes is given below. The performance is demonstrated in
 
 
 [![IMAGE ALT TEXT](https://i.ytimg.com/vi/vYhxZa9cnVI/0.jpg?time=1509368669565)](https://youtu.be/vYhxZa9cnVI "Project Video")
+
+
 *Click above image to view the project video*
 
 ### Description of Code
-#### Lines 1-162:  Starter code functions
+#### Lines 1-162:  Udacity provided starter code functions
 #### Lines 164-267: Load data and initialize variables
 #### Lines 270-308: Determine position and speed of nearest leading and trailing car for each lane
 1. Assign each car to a lane.
