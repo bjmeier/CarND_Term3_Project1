@@ -151,7 +151,7 @@ First, the distance to the road centerline, `s_ahead` is selected.  This is the 
 
 Then, points at `s_ahead`, `2 * s_ahead` and `3 * s_ahead` are added to the two starting points to form the set of coordinates to be fit to a spline, `ptsx` and `ptsy`.
 #### Lines 538-554:  Transform points and create a spline to fit future points
-`ptsx` and `ptsy` are transformed from the map reference frame to the car coordinate reference frame and are then used to create a spline, `s`, using functions contained in `spine.h` file which can be found [here](“http://kluge.in-chemnitz.de/opensource/spline/”).  The car reference frame is one in which the car is centered at the origin and the bearing is the x-axis.
+`ptsx` and `ptsy` are transformed from the map reference frame to the car coordinate reference frame and are then used to create a spline, `s`, using functions contained in `spine.h` file which can be found [here](http://kluge.in-chemnitz.de/opensource/spline/).  The car reference frame is one in which the car is centered at the origin and the bearing is the x-axis.
 #### Lines 556-597:  Create set of points to feed back to the simulator
 1. The previous buffer points are loaded into the vectors `next_x_vals` and `next_y_vals`. 
 2. The number of new points required, `N-lag` is set to the difference of ten and the number of points remaining in the buffer.
