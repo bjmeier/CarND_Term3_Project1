@@ -164,7 +164,7 @@ Then, points at `s_ahead`, `2 * s_ahead` and `3 * s_ahead` are added to the two 
 #### Lines 602-608: `next_x_vals` and `next_y_vals` vectors are fed back to the simulator.
 #### Lines 609-610:  Push back speed values
 #### Line 611:  Adjust the number of point remaining.
-`if(prev_size < 8){N_points += 1;};  if(prev_size > 8){N_points -= 1;}`
-This keeps the number of points remaining in the buffer near eight and helps prevent emptying the buffer  on a slow machine without sacrificing responsiveness on a fast machine.    
+Line 611 is: '`if(prev_size < 8){N_points += 1;};  if(prev_size > 8){N_points -= 1;}`
+This keeps the number of points remaining in the buffer near eight.  This helps prevent emptying the buffer on a slow machine without sacrificing responsiveness on a fast machine.    
 ### Conclusion
 A c++ program to safely navigate a car through traffic on a highway on the Udacity simulator was successfully developed and implemented. 
