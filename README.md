@@ -147,20 +147,24 @@ The acceleration is set by the calculations listed below.
 #### Lines 478-487: Set reference points
 The car coordinate and bearing, `car_x` and `car_y` and `car_yaw` are set in m, m, and degrees respectively.
 #### Lines 489-519: Select starting points
-As is described below, a 10 step long (0.2 s) buffer is generated.  The starting point for setting the points is the last two points if the buffer as long as the buffer length is at least two.  If it is not, the starting points are the car position and a point directly behind the position of the car. 
+As described below, a buffer of size `N_points` is generated.  The buffer size is adjusted at line 611 so that about eight points remain after processing by the simulator.  On the authors computer, the number of points tended to stay between 9 and 12 points which allows the car to be projected between 0.18 and 0.24 seconds into the future.  The starting point for setting the points is the last two points if the buffer length is at least two.  If it is not, the starting points are the car position and a point directly behind the position of the car. 
 #### Lines 520-535: Add points to be used to fit the path
 First, the distance to the road centerline, `s_ahead` is selected.  This is the minimum of 20 m and the velocity in m/s multiplied by 2.0 s. Assuming one lane change of 4 m, this limits the during change jerk to 1 m/s^3 and the peak normal velocity to 6.0 m/s^2. This balances the risk with being between lanes with ride comfort. 
 
 Then, points at `s_ahead`, `2 * s_ahead` and `3 * s_ahead` are added to the two starting points to form the set of coordinates to be fit to a spline, `ptsx` and `ptsy`.
 #### Lines 538-554:  Transform points and create a spline to fit future points
 `ptsx` and `ptsy` are transformed from the map reference frame to the car coordinate reference frame and are then used to create a spline, `s`, using functions contained in the `spine.h` file which can be found [here](http://kluge.in-chemnitz.de/opensource/spline/).  The car reference frame is one in which the car is centered at the origin and the bearing is the x-axis.
-#### Lines 556-597:  Create set of points to feed back to the simulator
+#### Lines 556-598:  Create set of points to feed back to the simulator
 1. The previous buffer points are loaded into the vectors `next_x_vals` and `next_y_vals`. 
 2. The number of new points required, `N-lag`, is set to the difference of ten and the number of points remaining in the buffer.
 3. The change in x-direction is estimated. It is assumed that the car will return to the track centerline in 20.0 m along a straight line of distance, `dist = sqrt[(y(x = 20 m) - y(x = 0 m))^2 + (20 m) ^ 2]`The `x_point` values are set so that `dist / dt = ref_vel`.  
 4. The `x_point` values are fed into the spline `s` to generate new `y_points`.
 5. The `x_point` and `y_point` values are transformed from the car reference frame to the map reference frame.
 6. These transformed points are added to the `next_x_vals` and `next_y_vals` vectors.
-#### Lines 601-602: `next_x_vals` and `next_y_vals` vectors are fed back to the simulator.
+#### Lines 602-608: `next_x_vals` and `next_y_vals` vectors are fed back to the simulator.
+#### Lines 609-610:  Push back speed values
+#### Line 611:  Adjust the number of point remaining.
+`if(prev_size < 8){N_points += 1;};  if(prev_size > 8){N_points -= 1;}`
+This keeps the number of points remaining in the buffer near eight and helps prevent emptying the buffer  on a slow machine without sacrificing responsiveness on a fast machine.    
 ### Conclusion
 A c++ program to safely navigate a car through traffic on a highway on the Udacity simulator was successfully developed and implemented. 
