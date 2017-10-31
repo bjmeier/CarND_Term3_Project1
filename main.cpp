@@ -204,8 +204,8 @@ int main() {
   double ap = 2.0;
   int lane = 1;			// lane occupied by car
   int N_lag = 1;		// number of new points.  Allows jerk limit to be independant of latency.
-
-  h.onMessage([&ap, &N_lag, &max_s, &vn1, &vn2, &ref_vel, &lane, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  int N_points = 9;     // buffer length.  N/50 seconds;
+  h.onMessage([&N_points, &ap, &N_lag, &max_s, &vn1, &vn2, &ref_vel, &lane, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -469,7 +469,7 @@ int main() {
             	a = atemp;
             }
 
-          	cout << "j = " << (atemp - ap)/dt << " a = " << a << " ds = " << ds <<
+          	cout << "j = " << (atemp - ap)/(dt*N_lag) << " a = " << a << " ds = " << ds <<
           			" vn2 = " << vn2 << " vn1 = " << vn1 << " ap = " << ap <<
           			endl;
           	cout << "time ahead = " << sa[lane]/max(0.01, vn1) << endl;
@@ -490,8 +490,8 @@ int main() {
           	if(prev_size< 2)
           	{
           		// use two points that make the path tangent to the car
-          		double prev_car_x = car_x - cos(car_yaw);
-          		double prev_car_y = car_y - sin(car_yaw);
+          		double prev_car_x = car_x - cos(ref_yaw);
+          		double prev_car_y = car_y - sin(ref_yaw);
 
           		ptsx.push_back(prev_car_x);
           		ptsx.push_back(car_x);
@@ -570,9 +570,10 @@ int main() {
 
           	double x_add_on = 0;
 
-          	double N_points = 10;  // buffer length.  N/50 seconds.
+
           	N_lag = N_points - previous_path_x.size();//
-          	cout <<"N_lag = " << N_lag << endl << endl;
+          	cout <<"N_lag = " << N_lag <<" N_points = " << N_points << " prev_size = " << prev_size <<
+          			endl << endl;
           	// fill up the rest of our path planner after filling it with previous points
           	for(int i = 1; i <= N_points - previous_path_x.size(); i++)
           	{
@@ -607,7 +608,7 @@ int main() {
           	ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
           	vn2 = vn1;
           	vn1 = ref_vel * 0.44704;
-          
+          	if(prev_size < 8){N_points += 1;};  if(prev_size > 8){N_points -= 1;}
         }
       } else {
         // Manual driving
