@@ -27,8 +27,7 @@ This is demonstrated in video linked below.
 - Car must change lanes when it makes sense to do so.
 The logic behind lane changes is given below. The performance is demonstrated in the video linked below.
 
-
-[![IMAGE ALT TEXT](https://i.ytimg.com/vi/vYhxZa9cnVI/0.jpg?time=1509368669565)](https://youtu.be/vYhxZa9cnVI "Project Video")
+[![IMAGE ALT TEXT](https://i.ytimg.com/vi/2Xphrj5-EkU/0.jpg?time=1509464417261)](https://youtu.be/2Xphrj5-EkU "Project Video")
 
 *Click above image to view the project video*
 
